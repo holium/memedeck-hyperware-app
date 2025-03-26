@@ -1,0 +1,5 @@
+world memedeck-test-template-dot-os-v0 {
+    import memedeck;
+    import tester;
+    include process-v1;
+}

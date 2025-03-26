@@ -1,0 +1,15 @@
+[
+    {
+        "process_name": "memedeck-test",
+        "process_wasm_path": "/memedeck-test.wasm",
+        "on_exit": "Restart",
+        "request_networking": false,
+        "request_capabilities": [
+            "memedeck:memedeck:template.os"
+        ],
+        "grant_capabilities": [
+            "memedeck:memedeck:template.os"
+        ],
+        "public": true
+    }
+]

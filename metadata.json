@@ -1,0 +1,20 @@
+{
+    "name": "Memedeck",
+    "description": "AI-Powered Memes and Character Lab.",
+    "image": "",
+    "properties": {
+        "package_name": "memedeck",
+        "current_version": "1.0.0",
+        "publisher": "memedeck-tester.os",
+        "mirrors": [],
+        "code_hashes": {
+            "1.0.0": ""
+        },
+        "wit_version": 1,
+        "dependencies": [
+            "sign:sys"
+        ]
+    },
+    "external_url": "",
+    "animation_url": ""
+}

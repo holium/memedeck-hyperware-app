@@ -1,0 +1,28 @@
+interface memedeck {
+    variant request {
+        send(send-request),
+        /// history of memedeck with given node
+        history(string),
+    }
+
+    variant response {
+        send,
+        history(list<memedeck-message>),
+    }
+
+    record send-request {
+        target: string,
+        message: string,
+    }
+
+    record memedeck-message {
+        author: string,
+        content: string,
+    }
+}
+
+world memedeck-template-dot-os-v0 {
+    import sign;
+    import memedeck;
+    include process-v1;
+}
