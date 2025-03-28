@@ -1,14 +1,18 @@
 {
     "name": "Memedeck",
     "description": "AI-Powered Memes and Character Lab.",
-    "image": "",
+    "image": "https://media.memedeck.xyz/assets/memedeck-logo.jpg",
     "properties": {
         "package_name": "memedeck",
         "current_version": "1.0.0",
-        "publisher": "memedeck-tester.os",
-        "mirrors": [],
+        "publisher": "meme-deck.os",
+        "mirrors": [
+            "holium-corp.os",
+            "drunkplato.os",
+            "meme-deck.os"
+        ],
         "code_hashes": {
-            "1.0.0": ""
+            "1.0.0": "60e2badc8107e2aa40a666a2ab36f392ea8b1176c61b1716551c07e977c9c7e8"
         },
         "wit_version": 1,
         "dependencies": [
