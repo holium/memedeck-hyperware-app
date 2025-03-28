@@ -1,6 +1,6 @@
 [
     {
-        "process_name": "memedeck",
+        "process_name": "app",
         "process_wasm_path": "/memedeck.wasm",
         "on_exit": "Restart",
         "request_networking": false,
@@ -18,6 +18,6 @@
             "sign:sign:sys",
             "vfs:distro:sys"
         ],
-        "public": false
+        "public": true
     }
 ]

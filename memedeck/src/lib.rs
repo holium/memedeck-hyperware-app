@@ -5,10 +5,10 @@ use base64::{engine::general_purpose, Engine as _};
 use hyperware_process_lib::http::client::send_request_await_response;
 use hyperware_process_lib::http::server::{send_response, HttpBindingConfig, WsBindingConfig};
 use hyperware_process_lib::http::{Method, StatusCode};
-use hyperware_process_lib::logging::{info, init_logging, Level};
+use hyperware_process_lib::logging::{init_logging, Level};
 use hyperware_process_lib::{
-    await_message, call_init, get_blob, get_typed_state, homepage, http, kiprintln, set_state,
-    Address, Capability, Message, Request,
+    await_message, call_init, get_blob, homepage, http, kiprintln, Address, Capability, Message,
+    Request,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -18,11 +18,13 @@ use url::Url;
 
 mod proxy;
 
-// const WEB2_URL: &str = "https://staging.memedeck.xyz";
-// const WEB2_LOGIN_ENDPOINT: &str = "https://staging-api.memedeck.xyz/v2/auth/hyperware/login";
+const WEB2_URL: &str = "https://hyperware.memedeck.xyz";
+const WEB2_LOGIN_ENDPOINT: &str = "https://api.memedeck.xyz/v2/auth/hyperware/login";
+const PACKAGE_PATH: &str = "/app:memedeck:meme-deck.os";
 
-const WEB2_URL: &str = "http://localhost:3000";
-const WEB2_LOGIN_ENDPOINT: &str = "http://localhost:8080/v2/auth/hyperware/login";
+// const WEB2_URL: &str = "http://localhost:3000";
+// const WEB2_LOGIN_ENDPOINT: &str = "http://localhost:8080/v2/auth/hyperware/login";
+
 const WEB2_LOGIN_NONCE: &str = "951f64b8-5905-47f8-b12c-3ca8f53119f2";
 
 wit_bindgen::generate!({
@@ -49,44 +51,6 @@ struct LoginMessage {
 
 const ICON: &str = include_str!("icon");
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ProxyStateV1 {
-    pub cookie: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "version")]
-enum VersionedState {
-    /// State fully stored in memory, persisted using serde_json.
-    /// Future state version will use SQLite.
-    V1(ProxyStateV1),
-}
-
-impl VersionedState {
-    fn load() -> Self {
-        get_typed_state(|bytes| serde_json::from_slice(bytes))
-            .unwrap_or(Self::V1(ProxyStateV1 { cookie: None }))
-    }
-    fn _save(&self) {
-        set_state(&serde_json::to_vec(&self).expect("Failed to serialize state!"));
-    }
-    fn save_cookie(&self, cookie: String) {
-        let ns = Self::V1(ProxyStateV1 {
-            cookie: Some(cookie),
-        });
-        set_state(&serde_json::to_vec(&ns).expect("Failed to serialize state!"));
-    }
-    fn wipe_cookie(&self) {
-        let ns = Self::V1(ProxyStateV1 { cookie: None });
-        set_state(&serde_json::to_vec(&ns).expect("Failed to serialize state!"));
-    }
-    fn get_cookie(&self) -> Option<String> {
-        match self {
-            Self::V1(ps) => ps.cookie.clone(),
-        }
-    }
-}
-
 call_init!(initialize);
 fn initialize(our: Address) {
     init_logging(Level::DEBUG, Level::INFO, None, None, None).unwrap();
@@ -94,7 +58,6 @@ fn initialize(our: Address) {
 
     homepage::add_to_homepage("Memedeck", Some(ICON), Some("/home"), None);
 
-    let mut state = VersionedState::load();
     let mut cookie = None;
 
     let mut http_server = http::server::HttpServer::new(5);
@@ -105,12 +68,11 @@ fn initialize(our: Address) {
         .bind_ws_path("/", WsBindingConfig::default())
         .unwrap();
 
-    main_loop(&our, &mut state, &mut http_server, &mut cookie);
+    main_loop(&our, &mut http_server, &mut cookie);
 }
 
 fn main_loop(
     our: &Address,
-    state: &mut VersionedState,
     http_server: &mut http::server::HttpServer,
     cookie: &mut Option<String>,
 ) {
@@ -131,15 +93,7 @@ fn main_loop(
                 if source.node() != our.node {
                     continue;
                 }
-                let _ = handle_request(
-                    our,
-                    &source,
-                    &body,
-                    capabilities,
-                    state,
-                    http_server,
-                    cookie,
-                );
+                let _ = handle_request(our, &source, &body, capabilities, http_server, cookie);
             }
             _ => continue, // ignore responses
         }
@@ -151,7 +105,6 @@ fn handle_request(
     source: &Address,
     body: &[u8],
     _capabilities: Vec<Capability>,
-    state: &mut VersionedState,
     http_server: &mut http::server::HttpServer,
     cookie: &mut Option<String>,
 ) -> anyhow::Result<()> {
@@ -161,7 +114,7 @@ fn handle_request(
         let server_request = http_server.parse_request(body).unwrap();
         match server_request {
             http::server::HttpServerRequest::Http(request) => {
-                handle_page_request(our, state, &request, cookie)?;
+                handle_page_request(our, &request, cookie)?;
             }
             // TODO handle websockets
             _ => (),
@@ -172,16 +125,15 @@ fn handle_request(
 
 fn handle_page_request(
     our: &Address,
-    state: &mut VersionedState,
     http_request: &http::server::IncomingHttpRequest,
     cookie: &mut Option<String>,
 ) -> anyhow::Result<()> {
     match cookie {
         Some(cookie) => {
-            return proxy::run_proxy(&http_request, WEB2_URL, &cookie);
+            return proxy::run_proxy(&http_request, WEB2_URL, &cookie, PACKAGE_PATH);
         }
         None => {
-            let new_cookie = auto_login(our, state)?;
+            let new_cookie = auto_login(our)?;
             *cookie = new_cookie;
 
             send_refresh_response(1, cookie.clone().unwrap())?;
@@ -190,11 +142,7 @@ fn handle_page_request(
     }
 }
 
-fn auto_login(
-    our: &Address,
-    state: &mut VersionedState,
-    // http_request: &http::server::IncomingHttpRequest,
-) -> anyhow::Result<Option<String>> {
+fn auto_login(our: &Address) -> anyhow::Result<Option<String>> {
     let target = Address::new(our.node(), ("sign", "sign", "sys"));
     let body = LoginMessage {
         site: WEB2_URL.to_string(),
@@ -227,13 +175,12 @@ fn auto_login(
         .send_and_await_response(10)??;
     let message_blob = get_blob().unwrap();
 
-    let new_cookie = attempt_login(our, state, message_blob.bytes, signature_blob.bytes)?;
+    let new_cookie = attempt_login(our, message_blob.bytes, signature_blob.bytes)?;
     Ok(new_cookie)
 }
 
 fn attempt_login(
     our: &Address,
-    state: &mut VersionedState,
     message: Vec<u8>,
     signature: Vec<u8>,
     //signature_response: SignResponse,
@@ -301,7 +248,7 @@ fn get_now() -> u64 {
 
 fn send_refresh_response(delay_seconds: u32, cookie: String) -> anyhow::Result<()> {
     // Get our address to construct a proper path
-    let home_path = "/memedeck:memedeck:memedeck-tester.os/home"; // Use the same path defined in initialize()
+    let home_path = format!("{}/home", PACKAGE_PATH); // Use the same path defined in initialize()
 
     let html = format!(
         r#"<!DOCTYPE html>
@@ -371,50 +318,4 @@ fn send_refresh_response(delay_seconds: u32, cookie: String) -> anyhow::Result<(
         Some(headers),
         html.into_bytes(),
     ))
-}
-
-// fn send_refresh_response(delay_seconds: u32) -> anyhow::Result<()> {
-//     let html = format!(
-//         r#"<!DOCTYPE html>
-// <html>
-// <head>
-//     <meta http-equiv="refresh" content="1; url=/memedeck:memedeck:memedeck-tester.os/home">
-//     <title>Redirecting...</title>
-// </head>
-// <body>
-//     <h1>Login Successful</h1>
-//     <p>You are being redirected to the application...</p>
-// </body>
-// </html>"#,
-//     );
-
-//     let mut headers = HashMap::new();
-//     headers.insert("Content-Type".to_string(), "text/html".to_string());
-
-//     send_response(StatusCode::OK, Some(headers), html.into_bytes());
-//     Ok(())
-// }
-
-// Add this function to handle authentication errors
-fn send_error_response(message: &str) -> anyhow::Result<()> {
-    let html = format!(
-        r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>Authentication Error</title>
-</head>
-<body>
-    <h1>Authentication Error</h1>
-    <p>{}</p>
-    <p><a href="/memedeck:memedeck:memedeck-tester.os/home">Try again</a></p>
-</body>
-</html>"#,
-        message
-    );
-
-    let mut headers = HashMap::new();
-    headers.insert("Content-Type".to_string(), "text/html".to_string());
-
-    send_response(StatusCode::UNAUTHORIZED, Some(headers), html.into_bytes());
-    Ok(())
 }
