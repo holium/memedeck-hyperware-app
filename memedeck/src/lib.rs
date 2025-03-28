@@ -54,7 +54,6 @@ const ICON: &str = include_str!("icon");
 call_init!(initialize);
 fn initialize(our: Address) {
     init_logging(Level::DEBUG, Level::INFO, None, None, None).unwrap();
-    kiprintln!("begin");
 
     homepage::add_to_homepage("Memedeck", Some(ICON), Some("/home"), None);
 
@@ -220,7 +219,6 @@ fn attempt_login(
     };
     let resbody = res.body();
     let resjson = serde_json::from_slice::<serde_json::Value>(resbody)?;
-    kiprintln!("resjson: {:?}", resjson);
     let res_token = resjson.get("cookie");
 
     match res_token {
